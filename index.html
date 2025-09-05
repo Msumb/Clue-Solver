@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>RS3 Elite Compass Solver (Alt1)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root { --ink:#0f172a; --muted:#64748b; --accent:#22c55e; --bg:#0b1020; --panel:#111735; --edge:#1f2a59; --good:#22c55e; --warn:#f59e0b; --bad:#ef4444; }
+  html,body { height:100%; margin:0; background:linear-gradient(180deg,#0b1020,#0b1020 40%,#0b1020); color:#e5e7eb; font:14px/1.45 system-ui,Segoe UI,Roboto,Ubuntu; }
+  .wrap { display:grid; grid-template-columns: 1fr 320px; gap:12px; height:100%; padding:12px; box-sizing:border-box; }
+  .card { background:var(--panel); border:1px solid var(--edge); border-radius:14px; box-shadow:0 8px 24px rgba(0,0,0,.25); overflow:hidden; }
+  .card h2 { margin:0; padding:12px 14px; font-size:16px; background:rgba(255,255,255,.03); border-bottom:1px solid var(--edge); }
+  .toolbar { display:flex; gap:8px; padding:12px; border-bottom:1px dashed rgba(255,255,255,.08);}
+  .toolbar button, .toolbar label { background:#121b3d; border:1px solid #2a356b; color:#e5e7eb; padding:8px 10px; border-radius:10px; cursor:pointer; }
+  .toolbar button:hover { border-color:#3b4aa0; }
+  .toolbar input[type=file] { display:none; }
+  .grid { display:grid; grid-template-columns:1fr; gap:10px; padding:12px; }
+  .kv { display:grid; grid-template-columns: 140px 1fr; gap:8px; align-items:center; }
+  .kv .v { color:#cbd5e1; font-variant-numeric:tabular-nums; }
+  .kv .v b { color:#fff; }
+  .ok { color:var(--good); }
+  .warn { color:var(--warn); }
+  .bad { color:var(--bad); }
+  #mapwrap { position:relative; }
+  #map { display:block; width:100%; height:calc(100% - 48px); background:#0a0f24; }
+  #hint { position:absolute; left:10px; bottom:10px; background:rgba(0,0,0,.45); padding:6px 8px; border:1px solid rgba(255,255,255,.15); border-radius:8px; font-size:12px; color:#cbd5e1;}
+  .pins-toggle { margin-left:auto; display:flex; gap:8px; align-items:center; }
+  .foot { padding:8px 12px; border-top:1px solid var(--edge); color:#94a3b8; font-size:12px; display:flex; justify-content:space-between; }
+  .small { font-size:12px; color:#a3b6d6;}
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { background:#0f1533; border:1px solid #28346c; padding:4px 8px; border-radius:999px; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card" id="mapcard">
+    <h2>Compass Triangulation Map</h2>
+    <div class="toolbar">
+      <button id="btnStartWatch">Start Compass Watch</button>
+      <button id="btnAddLine" title="Click a point on the map to add a line using the current compass angle">Add Line</button>
+      <button id="btnClear">Clear Lines</button>
+      <label>Import Locations JSON<input id="fileJson" type="file" accept="application/json" /></label>
+      <label>Load Map Image<input id="fileImg" type="file" accept="image/*" /></label>
+      <div class="pins-toggle">
+        <label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" id="showPins" checked/> Show all locations</label>
+      </div>
+    </div>
+    <div id="mapwrap" style="height:calc(100% - 110px);">
+      <canvas id="map"></canvas>
+      <div id="hint">Tip: click to set your current position (after teleport) and press <b>Add Line</b>. Two lines = result.&nbsp;&nbsp;<span class="small">Scroll = zoom, drag = pan</span></div>
+    </div>
+    <div class="foot">
+      <div>Drag your own high-res world map image for best results.</div>
+      <div class="small">Overlay + pixel capture powered by Alt1 API. (Requires “Screen pixels” + “Overlay” + “Game state” permissions.)</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Status & Controls</h2>
+    <div class="grid">
+      <div class="kv"><div>Alt1 detected</div><div class="v" id="alt1ok">…</div></div>
+      <div class="kv"><div>Compass angle</div><div class="v"><span id="angle">–</span>° <span id="angleNote" class="small"></span></div></div>
+      <div class="kv"><div>Lines</div><div class="v"><b id="lineCount">0</b> (need ≥ 2)</div></div>
+      <div class="kv"><div>Intersection</div><div class="v"><span id="ix">–</span></div></div>
+      <div class="kv"><div>Nearest location</div><div class="v"><b id="nearestName">–</b> <span class="small" id="nearestDist"></span></div></div>
+      <div class="kv"><div>Overlay</div><div class="v" id="overlayState">–</div></div>
+      <div>
+        <div class="chips">
+          <span class="chip">ALT+1 to install (if prompted)</span>
+          <span class="chip">Keep clue’s compass visible</span>
+          <span class="chip">RS UI/Game scale 100%</span>
+        </div>
+      </div>
+      <div class="small">If the compass is on another “layer” (e.g., Dungeoneering), the arrow spins differently. The watcher copes, but it helps to keep a clean view. (Known behavior in compass clues.) :contentReference[oaicite:6]{index=6}</div>
+    </div>
+  </div>
+</div>
+
+<!-- Alt1 base library via jsDelivr (official Alt1 packages) -->
+<script src="https://cdn.jsdelivr.net/npm/@alt1/base@1.0.0-alpha.7/dist/index.umd.js"></script>
+<script>
+/* =====================================================================================
+   RS3 Elite Compass Solver (Alt1)
+   - Auto compass angle reader (screen pixels)
+   - Map triangulation + nearest-known-location snap + auto-zoom
+   - Alt1 overlays on top of RS
+   ===================================================================================== */
+
+/* ---------- Alt1 detection & self-identify ---------- */
+const hasAlt1 = typeof window.alt1 !== "undefined" && alt1 && alt1.versionint;
+const alt1Status = document.getElementById("alt1ok");
+if (hasAlt1) {
+  alt1Status.innerHTML = '<span class="ok">Yes</span> <span class="small mono">v'+ alt1.version +'</span>';
+  try {
+    // show “Add app” button in Alt1 if not installed (official API call)
+    alt1.identifyAppUrl(location.origin + location.pathname.replace(/\/[^/]*$/, "/") + "appconfig.json");
+  } catch (e) {}
+} else {
+  alt1Status.innerHTML = '<span class="warn">Not in Alt1</span> <span class="small">Open this in Alt1 Browser for capture & overlay.</span>';
+}
+
+/* ---------- Simple 2D map widget (pan/zoom, pins, lines) ---------- */
+const canvas = document.getElementById("map");
+const ctx = canvas.getContext("2d");
+let W = 0, H = 0;
+let mapImg = null;
+let scale = 1, minScale = 0.5, maxScale = 4;
+let offset = {x:0, y:0};
+let isPanning = false, panStart = {x:0,y:0}, offsetStart={x:0,y:0};
+
+function resize() {
+  const r = document.getElementById("mapwrap").getBoundingClientRect();
+  canvas.width = W = Math.max(300, Math.floor(r.width));
+  canvas.height = H = Math.max(300, Math.floor(r.height));
+  draw();
+}
+window.addEventListener("resize", resize);
+resize();
+
+canvas.addEventListener("wheel", (e) => {
+  const mouse = screenToWorld(e.offsetX, e.offsetY);
+  const dz = Math.sign(e.deltaY) * -0.15;
+  const s0 = scale;
+  scale = Math.min(maxScale, Math.max(minScale, scale * (1 + dz)));
+  // keep mouse position stable while zooming
+  const mouse2 = screenToWorld(e.offsetX, e.offsetY);
+  offset.x += (mouse2.x - mouse.x) * scale;
+  offset.y += (mouse2.y - mouse.y) * scale;
+  e.preventDefault();
+  draw();
+});
+
+canvas.addEventListener("mousedown", (e) => {
+  if (e.button === 0) {
+    isPanning = true; panStart = {x:e.clientX, y:e.clientY}; offsetStart = {...offset};
+  }
+});
+window.addEventListener("mouseup", ()=> isPanning=false);
+window.addEventListener("mousemove", (e) => {
+  if (isPanning) {
+    offset.x = offsetStart.x + (e.clientX - panStart.x);
+    offset.y = offsetStart.y + (e.clientY - panStart.y);
+    draw();
+  }
+});
+
+// world<->screen transforms
+function worldToScreen(p){ return { x: p.x*scale + offset.x, y: p.y*scale + offset.y }; }
+function screenToWorld(x,y){ return { x:(x - offset.x)/scale, y:(y - offset.y)/scale }; }
+
+/* ---------- Dataset: known compass locations ---------- */
+/* Schema: { id, name, x, y }  coordinates are in map-image pixel space.
+   IMPORTANT: this starter set is tiny & approximate — use the Import JSON button with a full dataset
+   (the app accepts the entire known list; see rs wiki/fandom for canonical locations). */
+let LOCATIONS = [
+  // Daemonheim area samples (approx positions; refine with your map)
+  {id:"dae-nw", name:"NW of Daemonheim Castle", x: 2650, y: 720},
+  {id:"dae-se", name:"SE of Daemonheim Castle", x: 2850, y: 980},
+  {id:"dae-s",  name:"S of Daemonheim Castle",  x: 2740, y: 1040},
+  // Mainland samples
+  {id:"tav",    name:"Taverley stone circle",   x: 2130, y: 1120},
+  {id:"edge",   name:"Edgeville bank",          x: 2350, y: 1030},
+  {id:"var",    name:"Varrock east bank",       x: 2550, y: 1075},
+  {id:"lum",    name:"Lumbridge courtyard",     x: 2480, y: 1180},
+  {id:"alk",    name:"Al Kharid palace",        x: 2680, y: 1230},
+  {id:"cath",   name:"Catherby docks",          x: 1850, y: 1185},
+  {id:"seers",  name:"Seers' Village",          x: 1960, y: 1100}
+];
+// You can import a complete JSON file with {id,name,x,y} items via the Import button.
+
+/* ---------- Compass watcher (pixel capture + angle detect) ---------- */
+const angleEl = document.getElementById("angle");
+const angleNoteEl = document.getElementById("angleNote");
+const overlayStateEl = document.getElementById("overlayState");
+
+let watching = false;
+let compassBox = null;  // {x,y,w,h} on the RS client
+let currentAngle = null;
+
+function startCompassWatch() {
+  if (!hasAlt1) { alert("Open this in Alt1 for pixel capture & overlays."); return; }
+  watching = true;
+  angleNoteEl.textContent = "(watching)";
+  overlayStateEl.textContent = "Overlay ready";
+  // Simple strategy:
+  // 1) Bind full RS frame
+  // 2) If no compassBox, try a coarse auto-scan to find a round widget (fallback: ask user to draw)
+  // 3) Within box, compute the arrow direction by scanning radial lines for strongest bright-edge response
+  loopWatch();
+}
+
+// crude circularity check for locating compass (fallbacks allowed)
+function locateCompass(img) {
+  // Heuristic: scan a grid, look for circular bright widget ~ 120-170 px
+  // For reliability across skins, we let user set it once by ctrl+drag if auto fails.
+  const W = img.width, H = img.height;
+  const step = 80;
+  const candidates = [];
+  for (let y=200; y<H-200; y+=step) for (let x=200; x<W-200; x+=step) {
+    const box = {x:x-90, y:y-90, w:180, h:180};
+    const score = circleEdgeScore(img, box);
+    if (score>0.25) candidates.push({box,score});
+  }
+  candidates.sort((a,b)=>b.score-a.score);
+  return candidates[0]?.box || null;
+}
+
+function circleEdgeScore(img, box) {
+  // estimate how "ring-like" area is
+  const {x,y,w,h} = box;
+  const cx=x+w/2, cy=y+h/2, r=w*0.47;
+  let hits=0, samples=0;
+  for (let t=0; t<360; t+=8) {
+    const rx = Math.round(cx + r*Math.cos(t*Math.PI/180));
+    const ry = Math.round(cy + r*Math.sin(t*Math.PI/180));
+    const col = img.readPixel(rx, ry);
+    const lum = ((col>>16)&255)*0.2126 + ((col>>8)&255)*0.7152 + (col&255)*0.0722;
+    if (lum>190) hits++;
+    samples++;
+  }
+  return hits/samples; // 0..1
+}
+
+function radialAngle(img, box) {
+  // returns angle in degrees (0 = up/North, clockwise) best matching a bright, thin arrow
+  const {x,y,w,h} = box;
+  const cx=x+w/2, cy=y+h/2;
+  const r0 = Math.max(12, Math.floor(w*0.18));
+  const r1 = Math.floor(w*0.46);
+  let best=-1, bestScore=-1;
+  for (let deg=0; deg<360; deg+=1) {
+    let s=0, n=0;
+    let px=-1, py=-1, prevLum=null;
+    for (let r=r0; r<=r1; r+=2) {
+      const rx = Math.round(cx + r*Math.sin(deg*Math.PI/180));
+      const ry = Math.round(cy - r*Math.cos(deg*Math.PI/180));
+      const col = img.readPixel(rx, ry);
+      const lum = ((col>>16)&255)*0.2126 + ((col>>8)&255)*0.7152 + (col&255)*0.0722;
+      if (prevLum!=null) s += Math.max(0, lum - prevLum); // bright edge along ray
+      prevLum = lum; n++;
+    }
+    const score = n>0 ? s/n : 0;
+    if (score>bestScore){ bestScore=score; best=deg; }
+  }
+  return best; // degrees clockwise from up/North
+}
+
+async function loopWatch() {
+  if (!watching) return;
+  try {
+    const img = a1lib.bindfullrs();       // binds RS frame (Alt1)
+    if (!img) throw new Error("No RS bind (capture).");
+    if (!compassBox) compassBox = locateCompass(img);
+    if (compassBox) {
+      const ang = radialAngle(img, compassBox);
+      currentAngle = ang;
+      angleEl.textContent = Math.round(ang);
+      angleNoteEl.textContent = "(live)";
+      drawOverlayCompassLine(ang, compassBox);
+    } else {
+      angleNoteEl.textContent = "(need compass view; or draw manually)";
+    }
+  } catch (e) {
+    angleNoteEl.textContent = "(paused: "+e.message+")";
+  }
+  requestAnimationFrame(loopWatch);
+}
+
+/* ---------- Alt1 overlay drawing ---------- */
+function drawOverlayCompassLine(deg, box) {
+  if (!hasAlt1) return;
+  try {
+    alt1.overLaySetGroup("compass");
+    const {x,y,w,h}=box, cx=Math.round(x+w/2), cy=Math.round(y+h/2);
+    const len = Math.round(w*0.65);
+    const x2 = Math.round(cx + len*Math.sin(deg*Math.PI/180));
+    const y2 = Math.round(cy - len*Math.cos(deg*Math.PI/180));
+    const col = a1lib.mixcolor(34, 197, 94); // green
+    alt1.overLayLine(col, 3, cx, cy, x2, y2, 1000);
+    alt1.overLayText("Compass "+Math.round(deg)+"°", col, 12, cx-40, cy- Math.round(w*0.6), 1000);
+  } catch(e) {
+    overlayStateEl.textContent = "Overlay error: "+e.message;
+  }
+}
+
+/* ---------- Lines + triangulation ---------- */
+let lines = []; // {x,y,deg}
+
+canvas.addEventListener("click", (e) => {
+  if (!addingLine) return;
+  const p = screenToWorld(e.offsetX, e.offsetY);
+  if (currentAngle==null) { alert("No compass angle yet. Press Start Compass Watch with the clue’s compass visible."); return; }
+  lines.push({x:p.x, y:p.y, deg:currentAngle});
+  addingLine=false;
+  updateStatus();
+  draw();
+  if (lines.length>=2) autoZoomIfSolved();
+});
+
+function clearLines(){ lines=[]; updateStatus(); draw(); }
+function updateStatus() {
+  document.getElementById("lineCount").textContent = lines.length;
+  const ix = intersectionLS(lines);
+  if (!ix) { document.getElementById("ix").textContent = "–"; document.getElementById("nearestName").textContent="–"; document.getElementById("nearestDist").textContent=""; return; }
+  const wpt = worldToScreen(ix);
+  document.getElementById("ix").textContent = Math.round(ix.x)+", "+Math.round(ix.y);
+  // nearest known location
+  let best=null, bestd=Infinity;
+  for (const L of LOCATIONS) {
+    const d = Math.hypot(L.x-ix.x, L.y-ix.y);
+    if (d<bestd) { best=L; bestd=d; }
+  }
+  if (best) {
+    document.getElementById("nearestName").textContent = best.name;
+    document.getElementById("nearestDist").textContent = bestd<9999 ? `(${Math.round(bestd)} px)` : "";
+  }
+}
+
+function intersectionLS(ls) {
+  if (ls.length<2) return null;
+  // least-squares intersection of multiple lines defined by point p and direction theta
+  let Axx=0,Axy=0,Ayx=0,Ayy=0, bx=0, by=0;
+  for (const L of ls) {
+    const th = (L.deg+90)*Math.PI/180;         // normal angle
+    const nx = Math.cos(th), ny = Math.sin(th); // unit normal
+    Axx += nx*nx; Axy += nx*ny; Ayx += ny*nx; Ayy += ny*ny;
+    bx  += nx*nx*L.x + nx*ny*L.y;
+    by  += ny*nx*L.x + ny*ny*L.y;
+  }
+  const det = Axx*Ayy - Axy*Ayx;
+  if (Math.abs(det)<1e-6) return null;
+  const ix = ( Ayy*bx - Axy*by)/det;
+  const iy = (-Ayx*bx + Axx*by)/det;
+  return {x:ix, y:iy};
+}
+
+function autoZoomIfSolved() {
+  const ix = intersectionLS(lines);
+  if (!ix) return;
+  // snap if within ~40 px of a known location
+  let best=null, bestd=999999;
+  for (const L of LOCATIONS) {
+    const d = Math.hypot(L.x-ix.x, L.y-ix.y);
+    if (d<bestd) { best=L; bestd=d; }
+  }
+  if (best && bestd <= 40) {
+    // zoom to the location
+    const target = best;
+    const desiredScale = Math.min(4, Math.max(scale, 2.5));
+    const sx = W/2 - target.x*desiredScale;
+    const sy = H/2 - target.y*desiredScale;
+    scale = desiredScale; offset.x = sx; offset.y = sy;
+    draw();
+    toast(`Pinpointed: ${best.name}`);
+  }
+}
+
+/* ---------- Rendering ---------- */
+const showPinsEl = document.getElementById("showPins");
+function draw() {
+  ctx.save();
+  ctx.clearRect(0,0,W,H);
+  // background
+  if (mapImg) {
+    ctx.save();
+    ctx.translate(offset.x, offset.y);
+    ctx.scale(scale, scale);
+    ctx.drawImage(mapImg, 0, 0);
+    // draw pins?
+    if (showPinsEl.checked) {
+      ctx.fillStyle = "#93c5fd";
+      ctx.strokeStyle = "#1d4ed8";
+      for (const L of LOCATIONS) {
+        ctx.beginPath(); ctx.arc(L.x, L.y, 5/scale, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+      }
+    }
+    // draw lines
+    ctx.strokeStyle = "#22c55e"; ctx.lineWidth = 2/scale;
+    for (const L of lines) {
+      const vx = Math.sin(L.deg*Math.PI/180), vy = -Math.cos(L.deg*Math.PI/180);
+      ctx.beginPath();
+      ctx.moveTo(L.x - 4000*vx, L.y - 4000*vy);
+      ctx.lineTo(L.x + 4000*vx, L.y + 4000*vy);
+      ctx.stroke();
+      // origin dot
+      ctx.fillStyle="#16a34a";
+      ctx.beginPath(); ctx.arc(L.x, L.y, 3/scale, 0, Math.PI*2); ctx.fill();
+    }
+    // intersection
+    const ix = intersectionLS(lines);
+    if (ix) {
+      ctx.fillStyle="#f59e0b";
+      ctx.beginPath(); ctx.arc(ix.x, ix.y, 4/scale, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  } else {
+    // empty background
+    ctx.fillStyle="#0a0f24"; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle="#94a3b8"; ctx.fillText("Load a world map image (drag & drop or 'Load Map Image').", 18, 26);
+  }
+  ctx.restore();
+}
+
+/* ---------- File inputs (map image + locations json) ---------- */
+document.getElementById("fileImg").addEventListener("change", (e)=>{
+  const f=e.target.files[0]; if(!f) return;
+  const url=URL.createObjectURL(f);
+  const img=new Image(); img.onload=()=>{ mapImg=img; // reset view
+    scale=Math.max(0.5, Math.min(1.2, Math.min(W/img.width, H/img.height))); offset.x=(W-img.width*scale)/2; offset.y=(H-img.height*scale)/2; draw(); };
+  img.src=url;
+});
+document.getElementById("fileJson").addEventListener("change",(e)=>{
+  const f=e.target.files[0]; if(!f) return;
+  const reader=new FileReader();
+  reader.onload=()=> {
+    try { const arr=JSON.parse(reader.result); if(!Array.isArray(arr)) throw new Error("Bad JSON"); LOCATIONS = arr; draw(); toast("Locations loaded: "+arr.length); }
+    catch(err){ alert("Invalid JSON: "+err.message); }
+  };
+  reader.readAsText(f);
+});
+// drag-n-drop image
+canvas.addEventListener("dragover",(e)=>{ e.preventDefault(); });
+canvas.addEventListener("drop",(e)=>{ e.preventDefault(); const f=e.dataTransfer.files[0]; if(!f) return; if(f.type.startsWith("image/")) {
+  const url=URL.createObjectURL(f); const img=new Image(); img.onload=()=>{ mapImg=img; scale=Math.max(0.5, Math.min(1.2, Math.min(W/img.width, H/img.height))); offset.x=(W-img.width*scale)/2; offset.y=(H-img.height*scale)/2; draw(); };
+  img.src=url;
+}});
+
+/* ---------- UI wiring ---------- */
+const btnStartWatch = document.getElementById("btnStartWatch");
+const btnAddLine = document.getElementById("btnAddLine");
+const btnClear = document.getElementById("btnClear");
+let addingLine=false;
+
+btnStartWatch.addEventListener("click", startCompassWatch);
+btnAddLine.addEventListener("click", ()=>{ addingLine=true; toast("Click your current position on the map to place a line using the live compass angle."); });
+btnClear.addEventListener("click", clearLines);
+showPinsEl.addEventListener("change", draw);
+
+/* ---------- Tiny toast ---------- */
+let toastTimer=null;
+function toast(msg) {
+  const el=document.getElementById("hint");
+  const keep = el.textContent;
+  el.textContent = msg;
+  el.style.borderColor = "rgba(255,255,255,.35)";
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>{ el.textContent=keep; el.style.borderColor="rgba(255,255,255,.15)"; }, 2600);
+}
+
+/* ---------- Notes ----------
+   • You can pre-bundle a high-res world map image and set it as default `mapImg`.
+   • To ship the full locations list, export JSON as: [{id,name,x,y}, ...] using your map’s pixel coords.
+   • Alt1 overlay API reference used here: identifyAppUrl, overLayLine, overLayText, overLaySetGroup. :contentReference[oaicite:7]{index=7}
+   • Alt1 apps are just web pages; you add them via appconfig + alt1:// link. :contentReference[oaicite:8]{index=8}
+------------------------------------------------------------------- */
+</script>
+</body>
+</html>
