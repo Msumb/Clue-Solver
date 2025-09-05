@@ -1,0 +1,15 @@
+{
+  "name": "RS3 Elite Compass Solver",
+  "description": "Alt1 plugin that auto-reads the compass, triangulates, and overlays all compass-clue locations on a live map with auto-zoom.",
+  "version": "1.0.0",
+  "appUrl": "https://YOUR-DOMAIN/rs3-compass/index.html",
+  "configUrl": "https://YOUR-DOMAIN/rs3-compass/appconfig.json",
+  "iconUrl": "https://YOUR-DOMAIN/rs3-compass/icon.png",
+  "permissions": ["pixel", "overlay", "gamestate"],
+  "defaultWindow": {
+    "title": "RS3 Compass Solver",
+    "width": 980,
+    "height": 640,
+    "resizable": true
+  }
+}
