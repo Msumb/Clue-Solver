@@ -1,51 +1,95 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>RS3 Elite Compass Solver</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="utf-8" />
+  <title>RS3 Elite Compass Solver — Install</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #0b0f14;
-      color: #e6eef4;
-      margin: 0;
-      padding: 20px;
-    }
-    h1 {
-      color: #58a6ff;
-    }
-    button {
-      background: #123155;
-      color: #e6eef4;
-      border: 1px solid #21456b;
-      padding: 10px 18px;
-      font-size: 16px;
-      border-radius: 8px;
-      cursor: pointer;
-      margin-top: 20px;
-    }
-    button:hover {
-      background: #1a4377;
-    }
+    body{margin:0;font:15px/1.45 system-ui,Segoe UI,Roboto,Arial;background:#0b0f14;color:#e6eef4}
+    header{padding:16px 18px;border-bottom:1px solid #1f2a36;background:#0e141b;position:sticky;top:0}
+    h1{margin:0;font-size:18px;color:#58a6ff}
+    main{max-width:780px;margin:18px auto;padding:0 18px}
+    .status{padding:12px 14px;border:1px solid #203042;border-radius:12px;background:#0c1622;margin-bottom:12px}
+    .ok{color:#22c55e}.bad{color:#ef4444}.warn{color:#f59e0b}
+    button{background:#123155;color:#e6eef4;border:1px solid #21456b;padding:10px 16px;border-radius:10px;cursor:pointer}
+    button:hover{background:#1a4377}
+    code, .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+    .row{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+    .small{font-size:12px;color:#a6b9d0}
+    .box{padding:10px;border:1px dashed #2a3a4b;border-radius:10px;background:#0b121a}
   </style>
 </head>
 <body>
-  <h1>RS3 Elite Compass Solver</h1>
-  <p>
-    This page is part of the Alt1 plugin. If you are viewing this inside the Alt1 Browser,
-    the plugin should prompt you to install automatically.
-  </p>
-  <button onclick='alt1.identifyAppUrl("https://msumb.github.io/Clue-Solver/appconfig.json")'>
-    Install in Alt1
-  </button>
+  <header><h1>RS3 Elite Compass Solver — Install</h1></header>
+  <main>
+    <div id="status" class="status">Checking Alt1…</div>
+
+    <div class="row">
+      <button id="btnInstall">Install in Alt1</button>
+      <button id="btnForce">Force prompt (identifyAppUrl)</button>
+    </div>
+
+    <div class="box">
+      <div><b>Config URL</b>: <span class="mono" id="cfg">https://msumb.github.io/Clue-Solver/appconfig.json</span></div>
+      <div class="small">If you see “Not running inside Alt1” below, you opened this in a normal browser. Open <b>Alt1 → Browser</b> and load this page there.</div>
+    </div>
+
+    <h3>If the button still seems to do nothing</h3>
+    <ol>
+      <li>Confirm you’re in the <b>Alt1 Browser</b> (not Chrome/Edge). The status above must say <span class="ok">Alt1 detected</span>.</li>
+      <li>Make sure the config URL opens in a normal browser: <a href="https://msumb.github.io/Clue-Solver/appconfig.json" target="_blank">/appconfig.json</a>.</li>
+      <li>Try the URL-encoded installer in your normal browser: <span class="mono">alt1://addapp/https%3A%2F%2Fmsumb.github.io%2FClue-Solver%2Fappconfig.json</span></li>
+    </ol>
+  </main>
 
   <script>
-    // Force install prompt automatically if running inside Alt1
-    if (window.alt1 && alt1.versionint) {
-      alt1.identifyAppUrl("https://msumb.github.io/Clue-Solver/appconfig.json");
+    const CONFIG_URL = "https://msumb.github.io/Clue-Solver/appconfig.json";
+    document.getElementById("cfg").textContent = CONFIG_URL;
+
+    const statusEl = document.getElementById("status");
+    function setStatus(html){ statusEl.innerHTML = html; }
+
+    // Detect Alt1 & show info
+    const inAlt1 = !!(window.alt1 && alt1.versionint);
+    if (inAlt1) {
+      setStatus(
+        '<b class="ok">Alt1 detected</b> <span class="small mono">v' + alt1.version + '</span><br>' +
+        'Click <b>Install in Alt1</b> or <b>Force prompt</b>.'
+      );
     } else {
-      console.log("Not running inside Alt1.");
+      setStatus(
+        '<b class="bad">Not running inside Alt1</b><br>' +
+        'Open <b>Alt1 → Browser</b> and go to <span class="mono">https://msumb.github.io/Clue-Solver/index.html</span>.'
+      );
+      console.log("Not inside Alt1 — window.alt1 is undefined.");
+    }
+
+    // Button: open alt1:// protocol (works from normal browser if handler is registered)
+    document.getElementById("btnInstall").addEventListener("click", () => {
+      try {
+        // Try to open via alt1:// even from here (some environments will pass to Alt1)
+        location.href = "alt1://addapp/" + encodeURIComponent(CONFIG_URL);
+      } catch (e) {
+        alert("Could not launch alt1:// handler: " + e.message);
+      }
+    });
+
+    // Button: call identifyAppUrl (only works inside Alt1 Browser)
+    document.getElementById("btnForce").addEventListener("click", () => {
+      if (!(window.alt1 && alt1.versionint)) {
+        alert("This only works inside the Alt1 Browser.");
+        return;
+      }
+      try {
+        alt1.identifyAppUrl(CONFIG_URL); // should trigger the Add App dialog
+      } catch (e) {
+        alert("identifyAppUrl failed: " + e.message);
+      }
+    });
+
+    // Also auto-try identify on load if inside Alt1
+    if (inAlt1) {
+      try { alt1.identifyAppUrl(CONFIG_URL); } catch (e) { console.log("identifyAppUrl error:", e); }
     }
   </script>
 </body>
