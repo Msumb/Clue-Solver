@@ -43,54 +43,40 @@
   </main>
 
   <script>
-    const CONFIG_URL = "https://msumb.github.io/Clue-Solver/appconfig.json";
-    document.getElementById("cfg").textContent = CONFIG_URL;
+  // Direct-install using identifyApp (no external fetch by Alt1)
+  (function () {
+    const cfg = {
+      name: "RS3 Elite Compass Solver",
+      description: "Alt1 plugin that auto-reads the compass, triangulates, and overlays all compass-clue locations on a live map with auto-zoom.",
+      version: "1.0.0",
+      appUrl: "https://msumb.github.io/Clue-Solver/index.html",
+      configUrl: "https://msumb.github.io/Clue-Solver/appconfig.json",
+      iconUrl: "https://msumb.github.io/Clue-Solver/icon.png",
+      permissions: ["pixel", "overlay", "gamestate"],
+      defaultWindow: { title: "RS3 Compass Solver", width: 980, height: 640, resizable: true }
+    };
 
-    const statusEl = document.getElementById("status");
-    function setStatus(html){ statusEl.innerHTML = html; }
-
-    // Detect Alt1 & show info
-    const inAlt1 = !!(window.alt1 && alt1.versionint);
-    if (inAlt1) {
-      setStatus(
-        '<b class="ok">Alt1 detected</b> <span class="small mono">v' + alt1.version + '</span><br>' +
-        'Click <b>Install in Alt1</b> or <b>Force prompt</b>.'
-      );
-    } else {
-      setStatus(
-        '<b class="bad">Not running inside Alt1</b><br>' +
-        'Open <b>Alt1 → Browser</b> and go to <span class="mono">https://msumb.github.io/Clue-Solver/index.html</span>.'
-      );
-      console.log("Not inside Alt1 — window.alt1 is undefined.");
+    function tryInstall() {
+      if (window.alt1 && alt1.versionint) {
+        try {
+          alt1.identifyApp(JSON.stringify(cfg));   // <- this should pop the “Add app” dialog
+          console.log("identifyApp called");
+        } catch (e) {
+          alert("identifyApp failed: " + e.message);
+        }
+      } else {
+        console.log("Not running inside Alt1.");
+      }
     }
 
-    // Button: open alt1:// protocol (works from normal browser if handler is registered)
-    document.getElementById("btnInstall").addEventListener("click", () => {
-      try {
-        // Try to open via alt1:// even from here (some environments will pass to Alt1)
-        location.href = "alt1://addapp/" + encodeURIComponent(CONFIG_URL);
-      } catch (e) {
-        alert("Could not launch alt1:// handler: " + e.message);
-      }
-    });
+    // Auto-run inside Alt1; keep the button as a backup:
+    tryInstall();
+    window.forceInstall = tryInstall;
+  })();
+</script>
 
-    // Button: call identifyAppUrl (only works inside Alt1 Browser)
-    document.getElementById("btnForce").addEventListener("click", () => {
-      if (!(window.alt1 && alt1.versionint)) {
-        alert("This only works inside the Alt1 Browser.");
-        return;
-      }
-      try {
-        alt1.identifyAppUrl(CONFIG_URL); // should trigger the Add App dialog
-      } catch (e) {
-        alert("identifyAppUrl failed: " + e.message);
-      }
-    });
+<!-- Optional button if you want one on the page -->
+<button onclick="forceInstall()">Install in Alt1 (direct)</button>
 
-    // Also auto-try identify on load if inside Alt1
-    if (inAlt1) {
-      try { alt1.identifyAppUrl(CONFIG_URL); } catch (e) { console.log("identifyAppUrl error:", e); }
-    }
-  </script>
 </body>
 </html>
