@@ -5,7 +5,11 @@
   "appUrl": "https://msumb.github.io/Clue-Solver/index.html",
   "configUrl": "https://msumb.github.io/Clue-Solver/appconfig.json",
   "iconUrl": "https://msumb.github.io/Clue-Solver/icon.png",
-  "permissions": ["pixel", "overlay", "gamestate"],
+  "permissions": [
+    "pixel",
+    "overlay",
+    "gamestate"
+  ],
   "defaultWindow": {
     "title": "RS3 Compass Solver",
     "width": 980,

@@ -1,0 +1,76 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Alt1 Diagnostic</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body{margin:0;font:15px/1.5 system-ui,Segoe UI,Roboto,Arial;background:#0b0f14;color:#e6eef4;padding:16px}
+  h1{color:#58a6ff;margin:0 0 12px}
+  pre{background:#0c1622;border:1px solid #203042;border-radius:8px;padding:10px;white-space:pre-wrap}
+  .ok{color:#22c55e}.bad{color:#ef4444}.warn{color:#f59e0b}
+  button{background:#123155;color:#e6eef4;border:1px solid #21456b;padding:8px 12px;border-radius:8px;cursor:pointer}
+</style>
+</head>
+<body>
+<h1>Alt1 Diagnostic</h1>
+<p>Status: <span id="status">Checking…</span></p>
+<p>Config URL: <code id="cfg">https://msumb.github.io/Clue-Solver/appconfig.json</code></p>
+<div>
+  <button id="btnIdentifyUrl">identifyAppUrl</button>
+  <button id="btnIdentify">identifyApp (inline)</button>
+</div>
+<h3>Console</h3>
+<pre id="log"></pre>
+<script>
+const LOG = document.getElementById('log');
+function log(msg){ LOG.textContent += msg + "\n"; }
+window.addEventListener('error', e => { log('ERROR: ' + e.message + '\n' + (e.error && e.error.stack || '')); });
+
+const CONFIG_URL = document.getElementById('cfg').textContent;
+const statusEl = document.getElementById('status');
+
+function isAlt1(){ return !!(window.alt1 && alt1.versionint); }
+function update(){
+  if(isAlt1()){
+    statusEl.innerHTML = '<span class="ok">Alt1 detected v'+alt1.version+'</span>';
+  } else {
+    statusEl.innerHTML = '<span class="bad">Not running inside Alt1</span>';
+  }
+}
+update();
+
+document.getElementById('btnIdentifyUrl').onclick = () => {
+  if(!isAlt1()){ log('Not in Alt1'); return; }
+  try{ alt1.identifyAppUrl(CONFIG_URL); log('identifyAppUrl sent'); }catch(e){ log('identifyAppUrl failed: '+e.message); }
+};
+
+document.getElementById('btnIdentify').onclick = () => {
+  if(!isAlt1()){ log('Not in Alt1'); return; }
+  try{
+    const cfg = {
+      name: "RS3 Elite Compass Solver",
+      description: "Auto compass triangulation with overlay + pins.",
+      version: "1.0.0",
+      appUrl: "https://msumb.github.io/Clue-Solver/index.html",
+      configUrl: CONFIG_URL,
+      iconUrl: "https://msumb.github.io/Clue-Solver/icon.png",
+      permissions: ["pixel","overlay","gamestate"],
+      defaultWindow: { title: "RS3 Compass Solver", width: 980, height: 640, resizable: true }
+    };
+    alt1.identifyApp(JSON.stringify(cfg));
+    log('identifyApp sent');
+  }catch(e){ log('identifyApp failed: '+e.message); }
+};
+
+// Poll a few times in case Alt1 injects late
+let tries=0;
+const t=setInterval(()=>{
+  tries++;
+  update();
+  if(isAlt1()) { clearInterval(t); }
+  if(tries>40) clearInterval(t);
+}, 300);
+</script>
+</body>
+</html>
