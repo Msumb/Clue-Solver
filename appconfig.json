@@ -2,9 +2,9 @@
   "name": "RS3 Elite Compass Solver",
   "description": "Alt1 plugin that auto-reads the compass, triangulates, and overlays all compass-clue locations on a live map with auto-zoom.",
   "version": "1.0.0",
-  "appUrl": "https://https://https://msumb.github.io/Clue-Solver/index.html",
-  "configUrl": "https://https://msumb.github.io/Clue-Solver/appconfig.json",
-  "iconUrl": "https://https://msumb.github.io/Clue-Solver/icon.png",
+  "appUrl": "https://msumb.github.io/Clue-Solver/index.html",
+  "configUrl": "https://msumb.github.io/Clue-Solver/appconfig.json",
+  "iconUrl": "https://msumb.github.io/Clue-Solver/icon.png",
   "permissions": ["pixel", "overlay", "gamestate"],
   "defaultWindow": {
     "title": "RS3 Compass Solver",
